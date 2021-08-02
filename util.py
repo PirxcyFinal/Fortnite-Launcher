@@ -78,11 +78,28 @@ def update_device_auths(new_data):
     except Exception as e:
         return False, e
 
-def wait_for_game_launch(process):
+def wait_for_game_launch(process, ignore_list):
 
     while True:
         if process.is_running() == False:
             return False, process.pid
         for p in psutil.process_iter(['name', 'pid']):
             if p.info['name'] == 'FortniteClient-Win64-Shipping.exe':
+                if p.info['pid'] in ignore_list:
+                    continue
                 return True, p.info['pid']
+
+def detect_other_clients():
+
+    log.debug('Looking for other running clients...')
+
+    clients = []
+
+    for p in psutil.process_iter(['name', 'pid']):
+        if p.info['name'] == 'FortniteClient-Win64-Shipping.exe':
+            clients.append(p.info['pid'])
+
+    if len(clients) != 0:
+        log.debug(f'Found "{len(clients)}" clients running. PIDs: {clients}')
+
+    return clients

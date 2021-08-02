@@ -1,6 +1,7 @@
 import requests
 import crayons
 import util
+import sys
 
 log = util.logger('Auth')
 
@@ -21,18 +22,25 @@ class AuthorizationCode:
     def __init__(self):
         self.authenticated = False
         self.auth_session = None
+        self._show_debug_requests = True #flag to hide/show requests in debug
+
+        if '--hide-requests-debug' in sys.argv:
+            self._show_debug_requests = False
 
     def HTTPRequest(self, url: str, headers = None, data = None, method = None):
 
         if method == 'GET':
             response = requests.get(url, headers=headers, data=data)
-            log.debug(f'[GET] {crayons.magenta(url)} > {response.text} | {response.headers}')
+            if self._show_debug_requests:
+                log.debug(f'[GET] {crayons.magenta(url)} > {response.text} | {response.headers}')
         elif method == 'POST':
             response = requests.post(url, headers=headers, data=data)
-            log.debug(f'[POST] {crayons.magenta(url)} > {response.text} | {response.headers}')
+            if self._show_debug_requests:
+                log.debug(f'[POST] {crayons.magenta(url)} > {response.text} | {response.headers}')
         elif method == 'DELETE':
             response = requests.delete(url, headers=headers, data=data)
-            log.debug(f'[DELETE] {crayons.magenta(url)} > {response.text} | {response.headers}')
+            if self._show_debug_requests:
+                log.debug(f'[DELETE] {crayons.magenta(url)} > {response.text} | {response.headers}')
 
         return response
 
@@ -136,18 +144,25 @@ class DeviceAuths:
     def __init__(self):
         self.authenticated = False
         self.auth_session = None
+        self._show_debug_requests = True #flag to hide/show requests in debug
+
+        if '--hide-requests-debug' in sys.argv:
+            self._show_debug_requests = False
 
     def HTTPRequest(self, url: str, headers = None, data = None, method = None):
 
         if method == 'GET':
             response = requests.get(url, headers=headers, data=data)
-            log.debug(f'[GET] {crayons.magenta(url)} > {response.text} | {response.headers}')
+            if self._show_debug_requests:
+                log.debug(f'[GET] {crayons.magenta(url)} > {response.text}')
         elif method == 'POST':
             response = requests.post(url, headers=headers, data=data)
-            log.debug(f'[POST] {crayons.magenta(url)} > {response.text} | {response.headers}')
+            if self._show_debug_requests:
+                log.debug(f'[POST] {crayons.magenta(url)} > {response.text}')
         elif method == 'DELETE':
             response = requests.delete(url, headers=headers, data=data)
-            log.debug(f'[DELETE] {crayons.magenta(url)} > {response.text} | {response.headers}')
+            if self._show_debug_requests:
+                log.debug(f'[DELETE] {crayons.magenta(url)} > {response.text}')
 
         return response
 

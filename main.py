@@ -1,3 +1,5 @@
+v = '1.0.1'
+
 import subprocess
 import crayons
 import time
@@ -136,8 +138,16 @@ class Main:
                     log.error(f'An error ocurred killing generated auth session: {kill[1]["errorMessage"]}')
 
                 else:
-                    newdata = self.device_auths.pop(accountslist[int_selection])
-                    util.update_device_auths(newdata)
+                    current_device_auths = self.device_auths
+                    removed_account = None
+                    for i in current_device_auths.keys():
+                        if i['display_name'] == to_remove['display_name']:
+                            removed_account = i
+                            break
+
+                    del current_device_auths[removed_account]
+
+                    util.update_device_auths(current_device_auths)
                     log.info(f'Account "{auth_session["display_name"]}" removed successfully!')
                     time.sleep(3)
                     return
@@ -145,7 +155,7 @@ class Main:
 
     def start(self):
 
-        print(f'\n{crayons.cyan("Fortnite Launcher", bold=True)} | {crayons.white("By Bay#1111", bold=True)}\n')
+        print(f'\n{crayons.cyan("Fortnite Launcher", bold=True)} | {crayons.white(f"Beta v{v}", bold=True)}\n')
 
         while True:
 
@@ -203,18 +213,22 @@ class Main:
                 continue
 
             exchangecode = exchange_code[1]['code']
-            epicusername = auth_session[1]['displayName']
-            epicuserid = auth_session[1]['account_id']
             game_executable = f'{self.configuration["fortnite_path"]}/FortniteGame/Binaries/Win64/FortniteLauncher.exe'
-            additional_arguments = self.configuration['commandline_arguments']
+            additional_arguments = self.configuration['commandline_arguments'].split(' ')
+            commandline = [game_executable, '-EpicPortal', '-AUTH_LOGIN=unused', f'-AUTH_PASSWORD={exchangecode}', '-AUTH_TYPE=exchangecode']
+
+            for i in additional_arguments:
+                commandline.append(i)
+
+            other_clients = util.detect_other_clients()
 
             log.info('Launching...')
-            l = subprocess.Popen([game_executable, '-EpicPortal', '-AUTH_LOGIN=unused', f'-AUTH_PASSWORD={exchangecode}', '-AUTH_TYPE=exchangecode', additional_arguments, f'-epicusername={epicusername}', f'-epicuserid={epicuserid}'])
+            l = subprocess.Popen(commandline)
             process = psutil.Process(pid=l.pid)
-            log.debug(f'Launched "FortniteLauncher.exe" with additional commandline "{additional_arguments}"')
+            log.debug(f'Launched "FortniteLauncher.exe" with commandline {commandline}')
             log.debug('Waiting for "FortniteClient-Win64-Shipping.exe" to spawn...')
 
-            wait = util.wait_for_game_launch(process)
+            wait = util.wait_for_game_launch(process, ignore_list=other_clients)
 
             if wait[0] == True:
                 log.info('Launched!')
