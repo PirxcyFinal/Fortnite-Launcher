@@ -30,7 +30,7 @@ You can add your accounts typing `A`, or remove them with `R`
 
 ```json
 {
-    "fortnite_path": "C:\Program Files\Epic Games\Fortnite",
+    "fortnite_path": "C:/Program Files/Epic Games/Fortnite",
     "command_line_arguments": "-USEALLAVAILABLECORES -NOSPLASH"
 }
 ```
