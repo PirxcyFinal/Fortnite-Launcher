@@ -26,13 +26,13 @@ class AuthorizationCode:
 
         if method == 'GET':
             response = requests.get(url, headers=headers, data=data)
-            log.debug(f'[GET] {crayons.magenta(url)} > {response.text}')
+            log.debug(f'[GET] {crayons.magenta(url)} > {response.text} | {response.headers}')
         elif method == 'POST':
             response = requests.post(url, headers=headers, data=data)
-            log.debug(f'[POST] {crayons.magenta(url)} > {response.text}')
+            log.debug(f'[POST] {crayons.magenta(url)} > {response.text} | {response.headers}')
         elif method == 'DELETE':
             response = requests.delete(url, headers=headers, data=data)
-            log.debug(f'[DELETE] {crayons.magenta(url)} > {response.text}')
+            log.debug(f'[DELETE] {crayons.magenta(url)} > {response.text} | {response.headers}')
 
         return response
 
@@ -141,13 +141,13 @@ class DeviceAuths:
 
         if method == 'GET':
             response = requests.get(url, headers=headers, data=data)
-            log.debug(f'[GET] {crayons.magenta(url)} > {response.text}')
+            log.debug(f'[GET] {crayons.magenta(url)} > {response.text} | {response.headers}')
         elif method == 'POST':
             response = requests.post(url, headers=headers, data=data)
-            log.debug(f'[POST] {crayons.magenta(url)} > {response.text}')
+            log.debug(f'[POST] {crayons.magenta(url)} > {response.text} | {response.headers}')
         elif method == 'DELETE':
             response = requests.delete(url, headers=headers, data=data)
-            log.debug(f'[DELETE] {crayons.magenta(url)} > {response.text}')
+            log.debug(f'[DELETE] {crayons.magenta(url)} > {response.text} | {response.headers}')
 
         return response
 
@@ -193,7 +193,7 @@ class DeviceAuths:
         if 'errorCode' in response.text:
             return False, response.json()
         else:
-            return True, response.json()
+            return True, response.json(), response.cookies
 
     def generate_device_auths(self):
 

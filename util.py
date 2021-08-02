@@ -57,7 +57,7 @@ def load_config():
         log.debug('Loaded configuration.')
         return config
     except Exception as e:
-        log.critical(f'Failed loading config file: {e}')
+        log.error(f'Failed loading config file: {e}')
         log_debug_traceback(e, log)
 
 def load_device_auths():
@@ -67,7 +67,7 @@ def load_device_auths():
         log.debug('Loaded device auths.')
         return device_auths
     except Exception as e:
-        log.critical(f'Failed loading device auths file: {e}')
+        log.error(f'Failed loading device auths file: {e}')
         log_debug_traceback(e, log)
 
 def update_device_auths(new_data):

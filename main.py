@@ -209,9 +209,8 @@ class Main:
             additional_arguments = self.configuration['commandline_arguments']
 
             log.info('Launching...')
-            l = subprocess.Popen([game_executable, '-AUTH_LOGIN=unused', f'-AUTH_PASSWORD={exchangecode}', '-AUTH_TYPE=exchangecode', '-epicapp=Fortnite', '-epicenv=Prod', '-EpicPortal', additional_arguments, f'-epicusername={epicusername}', f'-epicuserid={epicuserid}'])
+            l = subprocess.Popen([game_executable, '-EpicPortal', '-AUTH_LOGIN=unused', f'-AUTH_PASSWORD={exchangecode}', '-AUTH_TYPE=exchangecode', additional_arguments, f'-epicusername={epicusername}', f'-epicuserid={epicuserid}'])
             process = psutil.Process(pid=l.pid)
-            Auth.kill_auth_session()
             log.debug(f'Launched "FortniteLauncher.exe" with additional commandline "{additional_arguments}"')
             log.debug('Waiting for "FortniteClient-Win64-Shipping.exe" to spawn...')
 
@@ -219,10 +218,12 @@ class Main:
 
             if wait[0] == True:
                 log.info('Launched!')
+                Auth.kill_auth_session()
                 time.sleep(2)
                 exit()
             else:
                 log.error(f'Failed game launch.')
+                Auth.kill_auth_session()
                 print('\n')
                 time.sleep(3)
                 continue
