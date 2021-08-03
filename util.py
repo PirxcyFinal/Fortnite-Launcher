@@ -1,5 +1,7 @@
 import traceback
+import subprocess
 import datetime
+import requests
 import crayons
 import psutil
 import json
@@ -103,3 +105,29 @@ def detect_other_clients():
         log.debug(f'Found "{len(clients)}" clients running. PIDs: {clients}')
 
     return clients
+
+def check_for_updates(current_version: str):
+
+    log.debug('Checking updates...')
+
+    try:
+        response = requests.get('https://raw.githubusercontent.com/BayGamerYT/Fortnite-Launcher/main/main.py')
+        if response.status_code == 200:
+            data = response.text
+            splitted = data.splitlines(False)
+            new_version = splitted[0].replace("v = '", "").replace("'", "").replace(".", "")
+            if int(new_version) != int(current_version.replace(".", "")):
+                log.debug('There are an available update!')
+                return True
+            else:
+                log.debug('No updates found.')
+                return False
+    except Exception as e:
+        log.error('An error ocurred while checking updates.')
+        log_debug_traceback(e, log)
+        return False
+
+def open_launcher_folder():
+
+    update_file = __file__.replace('util.py', 'UPDATE.bat')
+    subprocess.Popen(f'explorer /select,"{update_file}"')

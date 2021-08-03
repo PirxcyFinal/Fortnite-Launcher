@@ -1,5 +1,6 @@
-v = '1.0.1'
+v = '1.0.2'
 
+from win10toast_click import ToastNotifier
 import subprocess
 import crayons
 import time
@@ -7,10 +8,12 @@ import time
 import psutil
 import util
 import json
+import sys
 
 import auth
 
 log = util.logger('Main')
+toaster = ToastNotifier()
 
 class Main:
 
@@ -155,6 +158,17 @@ class Main:
 
     def start(self):
 
+        if '--skip-update-check' not in sys.argv:
+            check = util.check_for_updates(v)
+            if check == True:
+                toaster.show_toast(
+                    title = 'Fortnite Launcher',
+                    msg = f'An update of Fortnite Launcher is available!\nRun "UPDATER.bat" to update.',
+                    duration = None,
+                    threaded = True,
+                    callback_on_click = util.open_launcher_folder
+                )
+
         print(f'\n{crayons.cyan("Fortnite Launcher", bold=True)} | {crayons.white(f"Beta v{v}", bold=True)}\n')
 
         while True:
@@ -243,5 +257,6 @@ class Main:
                 continue
 
 
-Launcher = Main()
-Launcher.start()
+if __name__ == '__main__':
+    Launcher = Main()
+    Launcher.start()
