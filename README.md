@@ -51,7 +51,8 @@ python main.py --skip-update-check
 ```json
 {
     "fortnite_path": "C:/Program Files/Epic Games/Fortnite",
-    "command_line_arguments": "-USEALLAVAILABLECORES -NOSPLASH"
+    "command_line_arguments": "-USEALLAVAILABLECORES -NOSPLASH",
+    "hide_emails": true
 }
 ```
 
