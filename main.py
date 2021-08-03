@@ -1,4 +1,4 @@
-v = '1.0.2'
+v = '1.0.3'
 
 from win10toast_click import ToastNotifier
 import subprocess
@@ -96,7 +96,10 @@ class Main:
         for account in accounts.keys():
             count += 1
             countlist.append(count)
-            print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]} - {account}')
+            if self.configuration['hide_emails'] == False:
+                print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]} - {account}')
+            else:
+                print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]}')
         
         print()
 
@@ -183,7 +186,10 @@ class Main:
             for account in accounts.keys():
                 count += 1
                 countlist.append(count)
-                print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]} - {account}')
+                if self.configuration['hide_emails'] == False:
+                    print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]} - {account}')
+                else:
+                    print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]}')
 
             print(f'\n{log.get_colored_box(crayons.blue, "A")} Add an account')
             print(f'{log.get_colored_box(crayons.blue, "R")} Remove an account\n')
