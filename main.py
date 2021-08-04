@@ -1,4 +1,4 @@
-v = '1.0.3'
+v = '1.0.4'
 
 from win10toast_click import ToastNotifier
 import subprocess
@@ -89,7 +89,7 @@ class Main:
         print(crayons.red('Remove Account', bold=True))
 
         accounts = self.device_auths
-        accountslist = [i for i in accounts]
+        accountslist = list(accounts)
         countlist = []
         count = 0
         
@@ -146,15 +146,15 @@ class Main:
                 else:
                     current_device_auths = self.device_auths
                     removed_account = None
-                    for i in current_device_auths.keys():
-                        if i['display_name'] == to_remove['display_name']:
-                            removed_account = i
+                    for i in accountslist:
+                        if i == account:
+                            removed_account = account
                             break
 
                     del current_device_auths[removed_account]
 
                     util.update_device_auths(current_device_auths)
-                    log.info(f'Account "{auth_session["display_name"]}" removed successfully!')
+                    log.info(f'Account "{auth_session[1]["displayName"]}" removed successfully!')
                     time.sleep(3)
                     return
 
