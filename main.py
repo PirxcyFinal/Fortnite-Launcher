@@ -259,7 +259,7 @@ class Main:
                 log.error(f'Failed game launch.')
                 Auth.kill_auth_session()
                 print('\n')
-                time.sleep(3)
+                time.sleep(1.5)
                 continue
 
 

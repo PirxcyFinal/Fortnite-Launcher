@@ -117,7 +117,7 @@ def check_for_updates(current_version: str):
             splitted = data.splitlines(False)
             new_version = splitted[0].replace("v = '", "").replace("'", "").replace(".", "")
             if int(new_version) != int(current_version.replace(".", "")):
-                log.debug('There are an available update!')
+                log.debug('There are an update available!')
                 return True
             else:
                 log.debug('No updates found.')
@@ -129,5 +129,11 @@ def check_for_updates(current_version: str):
 
 def open_launcher_folder():
 
-    update_file = __file__.replace('util.py', 'UPDATE.bat')
-    subprocess.Popen(f'explorer /select,"{update_file}"')
+    if sys.platform == 'win32':
+
+        update_file = __file__.replace('util.py', 'UPDATE.bat')
+        subprocess.Popen(f'explorer /select,"{update_file}"')
+    
+    else:
+
+        return
