@@ -1,4 +1,4 @@
-v = '1.0.4'
+v = '1.0.5'
 
 from win10toast_click import ToastNotifier
 import subprocess
@@ -232,10 +232,12 @@ class Main:
                 Auth.kill_auth_session()
                 continue
 
+            epicusername = Auth.auth_session['displayName']
+            epicuserid = Auth.auth_session['account_id']
             exchangecode = exchange_code[1]['code']
             game_executable = f'{self.configuration["fortnite_path"]}/FortniteGame/Binaries/Win64/FortniteLauncher.exe'
             additional_arguments = self.configuration['commandline_arguments'].split(' ')
-            commandline = [game_executable, '-EpicPortal', '-AUTH_LOGIN=unused', f'-AUTH_PASSWORD={exchangecode}', '-AUTH_TYPE=exchangecode']
+            commandline = [game_executable, '-AUTH_LOGIN=unused', f'-AUTH_PASSWORD={exchangecode}', '-AUTH_TYPE=exchangecode', 'epicapp=fortnite', '-epicenv=Prod', '-EpicPortal', f'-epicusername={epicusername}', f'-epicuserid={epicuserid}', '-epiclocale=en']
 
             for i in additional_arguments:
                 commandline.append(i)

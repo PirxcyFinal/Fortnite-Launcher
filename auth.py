@@ -61,7 +61,8 @@ class AuthorizationCode:
         }
         data = {
             "grant_type": "authorization_code",
-            "code": authorization_code
+            "code": authorization_code,
+            "token_type": "eg1"
         }
         response = self.post(OAUTH_TOKEN, headers, data)
 
@@ -185,7 +186,8 @@ class DeviceAuths:
             "grant_type": "device_auth",
             "device_id": device_auths['device_id'],
             "account_id": device_auths['account_id'],
-            "secret": device_auths['secret']
+            "secret": device_auths['secret'],
+            "token_type": "eg1"
         }
 
         response = self.post(OAUTH_TOKEN, headers=headers, data=data)
