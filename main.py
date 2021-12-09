@@ -1,270 +1,411 @@
-v = '1.0.5'
+v = '2.0'
 
-from win10toast_click import ToastNotifier
-import subprocess
-import crayons
-import time
+try:
+    import UEManifestReader
+    import coloredlogs
+    import aioconsole
+    import webbrowser
+    import subprocess
+    import crayons
+    import logging
+    import asyncio
+    import psutil
+    import json
+    import time
+    import sys
+    import os
+except:
+    print('It seems that some modules are missing. Run "INSTALL.bat" and try again.')
+    input('Press ENTER to exit')
 
-import psutil
-import util
-import json
-import sys
+from modules import http
 
-import auth
+log = logging.getLogger('FortniteLauncher')
 
-log = util.logger('Main')
-toaster = ToastNotifier()
+configuration = json.load(open('config.json', 'r', encoding = 'utf-8'))
+auths = json.load(open('auths.json', 'r', encoding = 'utf-8'))
 
-class Main:
+def get_colored_box(color, text):
 
-    def __init__(self):
-        self.configuration = None
-        self.device_auths = None
+    return f'{color("[")}{text}{color("]")}'
 
-    def _load_files(self):
+async def get_other_clients():
 
-        log.debug('Loading files...')
+    log.debug('Looking for other running clients...')
 
-        self.configuration = util.load_config()
-        self.device_auths = util.load_device_auths()
+    clients = []
 
-    def add_account(self):
+    for p in psutil.process_iter(['name', 'pid']):
+        if p.info['name'] == 'FortniteClient-Win64-Shipping.exe':
+            clients.append(p.info['pid'])
 
-        print()
+    log.debug(f'Found {len(clients)} clients.')
 
-        print(crayons.green('Add Account', bold=True))
+    return clients
 
-        Auth = auth.AuthorizationCode()
+async def wait_for_game_spawn(process: psutil.Process, ignore: list):
 
-        log.info(f'- Open this link {crayons.magenta(auth.AUTHORIZATION_CODE_URL)}\nAnd login with the account to add, then paste {crayons.yellow("ALL", bold=True)} the content of the page:\n')
-        content = input('')
-        print()
-        log.info('Adding account...')
-        try:
-            data = json.loads(content)
-            code = data['redirectUrl'].replace('com.epicgames.fortnite://fnauth/?code=', '')
-        except Exception as e:
-            log.error('An error ocurred processing the pasted data. Make sure you did it correctly')
-            util.log_debug_traceback(e, log)
-            return
+    log.debug(f'Waiting for game to spawn...')
 
-        auth_session = Auth.authenticate(authorization_code=code)
-        if auth_session[0] == False:
-            log.error(f'An error ocurred while authenticating: {auth_session[1]["errorMessage"]}')
-            return
+    while True:
+        if process.is_running() == False:
+            return False
+        for p in psutil.process_iter(['name', 'pid']):
+            if p.info['name'] == 'FortniteClient-Win64-Shipping.exe':
+                if p.info['pid'] in ignore:
+                    continue
+                return True
+
+
+async def add_account():
+
+    log.debug('add_account flow started.')
+
+    print()
+    print(crayons.green('Add Account', bold=True))
+
+    AUTHORIZATION_URL = 'https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code'
+    AUTHORIZATION_URL_LOGIN = 'https://www.epicgames.com/id/logout?redirectUrl=https%3A%2F%2Fwww.epicgames.com%2Fid%2Flogin%3FredirectUrl%3Dhttps%253A%252F%252Fwww.epicgames.com%252Fid%252Fapi%252Fredirect%253FclientId%253D34a02cf8f4414e29b15921876da36f9a%2526responseType%253Dcode'
+
+    while True:
+        user_selection = await aioconsole.ainput(f'Are you logged in to the required account in your web browser?\nType {crayons.green("1")} if yes.\nType {crayons.red("2")} if no.\n')
+
+        user_logged = user_selection.strip(' ')
+
+        if user_logged == '1':
+            choosen_url = AUTHORIZATION_URL
+        elif user_logged == '2':
+            choosen_url = AUTHORIZATION_URL_LOGIN
         else:
-            new_device_auth = Auth.generate_device_auths()
+            print('Select a valid option! Try again\n')
+            continue
+        break
 
-            if new_device_auth == False:
-                log.error(f'An error ocurred while creating device auth: {new_device_auth[1]["errorMessage"]}')
-                return
-            else:
-                account_info = Auth.get_account_info()
-                if account_info[0] == False:
-                    log.error(f'An error ocurred while requesting account info: {account_info[1]["errorMessage"]}')
-                else:
+    webbrowser.open_new_tab(choosen_url)
 
-                    new_data = {
-                        "display_name": account_info[1]['displayName'],
-                        "device_id": new_device_auth[1]['deviceId'],
-                        "account_id": new_device_auth[1]['accountId'],
-                        "secret": new_device_auth[1]['secret']
-                    }
+    print(choosen_url)
+    if user_logged == '1':
+        print('An epic games page should be opened in your web brower. Paste the authorizationCode here:')
+    else:
+        print('An epic games page should be opened in your web brower. Login on the required account and then paste the authorizationCode here:')
+    
+    user_code = await aioconsole.ainput('> ')
 
-                    self.device_auths[account_info[1]['email']] = new_data
-                    update = util.update_device_auths(self.device_auths)
-                    if update == False:
-                        util.log_debug_traceback(update[1], log)
+    code = user_code.strip(' ')
 
-                    Auth.kill_auth_session()
+    if code in ['cancel', 'c']:
+        log.debug('add_account flow stopped. User cancelled')
+        print('Account add cancelled')
+        return False
 
-                    log.info(f'Account "{account_info[1]["displayName"]}" added successfully!')
-                    time.sleep(3)
-                    return
+    if len(code) != 32:
+        log.debug('add_account flow stopped. The code from the user was invalid.')
+        print(f'Failed account add. The code\'s lenght is invalid. A valid authorization code is 32 characters long.')
+        return False
 
-    def remove_account(self):
+    Auth = http.EpicAPI()
 
-        print()
+    auth_request = await Auth.authorization_code_auth(code)
 
-        print(crayons.red('Remove Account', bold=True))
+    if 'errorCode' not in auth_request.text:
 
-        accounts = self.device_auths
-        accountslist = list(accounts)
+        oauth_json = auth_request.json()
+
+        credentials = {}
+
+        credentials['refresh_token'] = str(oauth_json['refresh_token'])
+        credentials['refresh_expires'] = int(time.time()) + oauth_json['refresh_expires']
+
+        auths[oauth_json['displayName']] = credentials
+
+        with open('auths.json', 'w', encoding='utf-8') as f:
+            json.dump(auths, f, indent=4, ensure_ascii=False)
+
+        log.debug('add_account flow completed without errors.')
+
+        return f'Account "{oauth_json["displayName"]}" added successfully! (Note: this login will expire after 23 days of inactivity)'
+
+    else:
+        print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
+        log.debug('add_account flow stopped. The authentication failed.')
+        return False
+
+async def remove_account():
+
+    log.debug('remove_account flow started.')
+
+    print()
+    print(crayons.red('Remove Account', bold=True))
+
+    while True:
+
+        account_list = list(auths.keys())
         countlist = []
         count = 0
-        
-        for account in accounts.keys():
+
+        for account in account_list:
             count += 1
             countlist.append(count)
-            if self.configuration['hide_emails'] == False:
-                print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]} - {account}')
-            else:
-                print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]}')
-        
-        print()
+            print(f'{get_colored_box(crayons.red, str(count))} {account}')
 
-        while True:
-            selected_acc = input(f'Select an account to remove: ')
+        print(f'{get_colored_box(crayons.green, "C")} Cancel\n')
 
-            try:
-                selected_acc.strip(' ')
-                if int(selected_acc) not in countlist:
-                    print(crayons.red('Invalid selection\n'))
-                    continue
 
-            except:
-                print(crayons.red('Please enter a valid number\n'))
+        user_selection = await aioconsole.ainput(f'Select an account: ')
+
+        try:
+            user_selection.strip(' ')
+
+            if user_selection.lower() in ['c', 'cancel']:
+                print(crayons.red('Account remove cancelled.'))
+                log.debug('remove_account flow cancelled by user.')
+                return False
+
+            if int(user_selection) not in countlist:
+                print(crayons.red('Invalid selection\n'))
                 continue
 
-            int_selection = int(selected_acc) - 1
-            break
+            else:
+                break
+        except:
+            print(crayons.red('Select a valid option\n'))
+            continue
+
+    credentials = auths[account_list[int(user_selection) - 1]]
+
+    if int(time.time()) > credentials['refresh_expires']:
+
+        del auths[account_list[int(user_selection) - 1]]
+
+        with open('auths.json', 'w', encoding='utf-8') as f:
+            json.dump(auths, f, indent=4, ensure_ascii=False)
+
+        log.debug('remove_account flow completed. The saved refresh wasn\'t valid and removed from auths.json file')
+        print('Account removed successfully.')
+        return True
+    
+    else:
+
+        Auth = http.EpicAPI()
+        auth_request = await Auth.refresh_token_auth(refresh_token = credentials['refresh_token'])
+
+        if 'errorCode' not in auth_request.text:
+
+            oauth_json = auth_request.json()
+            
+            kill_request = await Auth.kill_oauth_session(oauth_json['access_token'])
+
+            if kill_request != 403:
+
+                del auths[account_list[int(user_selection) - 1]]
+
+                with open('auths.json', 'w', encoding='utf-8') as f:
+                    json.dump(auths, f, indent=4, ensure_ascii=False)
+
+                log.debug('remove_account flow completed without errors')
+                print('Account removed successfully.')
+                return True
+
+        else:
+
+            print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
+            print('Removing account from auths.json file anyway.')
+
+            del auths[account_list[int(user_selection) - 1]]
+
+            with open('auths.json', 'w', encoding='utf-8') as f:
+                json.dump(auths, f, indent=4, ensure_ascii=False)
+
+            log.debug('remove_account flow failed successfully. Authentication failed but removed from auths.json anyways')
+
+            print('Account removed.') # task failed successfully
+            return True
+
+    
+async def launch_game(exchange_code: str, launch_command: str):
+
+    log.debug('Launching game...')
+
+    fortnite_path = configuration['fortnite_path']
+    executable_args = launch_command
+    additional_args = configuration["commandline_arguments"]
+
+    log.debug('Manifest downloaded and processed correctly, preparing command line arguments')
+
+    args = [
+        executable_args,
+        '-AUTH_LOGIN=unused',
+        f'-AUTH_PASSWORD={exchange_code}',
+        '-AUTH_TYPE=exchangecode',
+        '-epicapp=Fortnite',
+        '-epicenv=Prod',
+        '-EpicPortal',
+    ]
+
+    for i in additional_args:
+        if i.startswith('-'):
+            args.append(i)
+
+    ignore_list = await get_other_clients()
+
+    log.debug(f'Starting FortniteLauncher.exe with args {args}...')
+
+    FortniteLauncher = subprocess.Popen([f'{fortnite_path}/FortniteGame/Binaries/Win64/FortniteLauncher.exe'] + args, cwd=f'{fortnite_path}/FortniteGame/Binaries/Win64/', stdout=subprocess.DEVNULL)
+    process = psutil.Process(pid = FortniteLauncher.pid)
+
+    wait_spawn = await wait_for_game_spawn(process, ignore_list)
+
+    if wait_spawn == True:
+
+        log.debug('Game launched correctly.')
+        return True
+
+    else:
+
+        log.debug('Game did\'nt launch.')
+        return False
+
+
+async def start():
+
+    if '--debug' in sys.argv:
+        coloredlogs.install(
+            level='DEBUG'
+        )
+
+    while True:
 
         print()
-        log.info('Removing account...')
-
-        to_remove = accounts[accountslist[int_selection]]
-        log.debug(f'Removing account: {to_remove}')
-
-        Auth = auth.DeviceAuths()
-
-        auth_session = Auth.authenticate(to_remove)
-
-        if auth_session[0] == False:
-            log.error(f'An error ocurred while authenticating: {auth_session[1]["errorMessage"]}')
-            return
-        else:
-            delete = Auth.delete_device_auths(to_remove)
-
-            if delete[0] == False:
-                log.error(f'An error ocurred deleting device auths: {delete[1]["errorMessage"]}')
-            else:
-                kill = Auth.kill_auth_session()
-
-                if kill[0] == False:
-                    log.error(f'An error ocurred killing generated auth session: {kill[1]["errorMessage"]}')
-
-                else:
-                    current_device_auths = self.device_auths
-                    removed_account = None
-                    for i in accountslist:
-                        if i == account:
-                            removed_account = account
-                            break
-
-                    del current_device_auths[removed_account]
-
-                    util.update_device_auths(current_device_auths)
-                    log.info(f'Account "{auth_session[1]["displayName"]}" removed successfully!')
-                    time.sleep(3)
-                    return
-
-
-    def start(self):
-
-        if '--skip-update-check' not in sys.argv:
-            check = util.check_for_updates(v)
-            if check == True:
-                toaster.show_toast(
-                    title = 'Fortnite Launcher',
-                    msg = f'An update of Fortnite Launcher is available!\nRun "UPDATER.bat" to update.',
-                    duration = None,
-                    threaded = True,
-                    callback_on_click = util.open_launcher_folder
-                )
 
         print(f'\n{crayons.cyan("Fortnite Launcher", bold=True)} | {crayons.white(f"Beta v{v}", bold=True)}\n')
 
-        while True:
+        try:
+            configuration = json.load(open('config.json', 'r', encoding = 'utf-8'))
+        except Exception as e:
+            print(f'An error ocurred loading config.json file. {e}')
+            await aioconsole.ainput('Press ENTER to exit')
 
-            self._load_files()
+        try:
+            auths = json.load(open('auths.json', 'r', encoding = 'utf-8'))
+        except Exception as e:
+            print(f'An error ocurred loading auths.json file. {e}')
+            await aioconsole.ainput('Press ENTER to exit')
 
-            accounts = self.device_auths
-            accountslist = [i for i in accounts]
-            countlist = []
-            count = 0
+        account_list = list(auths.keys())
+        countlist = []
+        count = 0
 
-            for account in accounts.keys():
-                count += 1
-                countlist.append(count)
-                if self.configuration['hide_emails'] == False:
-                    print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]} - {account}')
-                else:
-                    print(f'{log.get_colored_box(crayons.green, str(count))} {accounts[account]["display_name"]}')
+        for account in account_list:
+            count += 1
+            countlist.append(count)
+            print(f'{get_colored_box(crayons.green, str(count))} {account}')
 
-            print(f'\n{log.get_colored_box(crayons.blue, "A")} Add an account')
-            print(f'{log.get_colored_box(crayons.blue, "R")} Remove an account\n')
-            selected_acc = input(f'Select an option: ')
+        print(f'\n{get_colored_box(crayons.blue, "A")} Add an account')
+        print(f'{get_colored_box(crayons.blue, "R")} Remove an account\n')
+        print(f'{get_colored_box(crayons.red, "X")} Exit\n')
 
-            try:
-                selected_acc.strip(' ')
+        user_selection = await aioconsole.ainput(f'Select an option: ')
 
-                if selected_acc.lower() == 'a':
-                    self.add_account()
-                    print()
-                    continue
+        try:
+            user_selection.strip(' ')
 
-                if selected_acc.lower() == 'r':
-                    if len(accountslist) == 0:
-                        print('There is no accounts to remove!\n')
-                    self.remove_account()
-                    print()
-                    continue
-
-                if int(selected_acc) not in countlist:
-                    print(crayons.red('Invalid selection\n'))
-                    continue
-
-            except:
-                print(crayons.red('Select a valid option\n'))
-                continue
-
-            int_selection = int(selected_acc) - 1
-            print()
-        
-            Auth = auth.DeviceAuths()
-            auth_session = Auth.authenticate(accounts[accountslist[int_selection]])
-            if auth_session[0] == False:
-                log.error(f'An error ocurred while authenticating: {auth_session[1]["errorMessage"]}')
-                continue
-            exchange_code = Auth.get_exchange_code()
-            if exchange_code[0] == False:
-                log.error(f'An error ocurred while generating exchange_code: {exchange_code[1]["errorMessage"]}')
-                Auth.kill_auth_session()
-                continue
-
-            epicusername = Auth.auth_session['displayName']
-            epicuserid = Auth.auth_session['account_id']
-            exchangecode = exchange_code[1]['code']
-            game_executable = f'{self.configuration["fortnite_path"]}/FortniteGame/Binaries/Win64/FortniteLauncher.exe'
-            additional_arguments = self.configuration['commandline_arguments'].split(' ')
-            commandline = [game_executable, '-AUTH_LOGIN=unused', f'-AUTH_PASSWORD={exchangecode}', '-AUTH_TYPE=exchangecode', 'epicapp=fortnite', '-epicenv=Prod', '-EpicPortal', f'-epicusername={epicusername}', f'-epicuserid={epicuserid}', '-epiclocale=en']
-
-            for i in additional_arguments:
-                commandline.append(i)
-
-            other_clients = util.detect_other_clients()
-
-            log.info('Launching...')
-            l = subprocess.Popen(commandline)
-            process = psutil.Process(pid=l.pid)
-            log.debug(f'Launched "FortniteLauncher.exe" with commandline {commandline}')
-            log.debug('Waiting for "FortniteClient-Win64-Shipping.exe" to spawn...')
-
-            wait = util.wait_for_game_launch(process, ignore_list=other_clients)
-
-            if wait[0] == True:
-                log.info('Launched!')
-                Auth.kill_auth_session()
-                time.sleep(2)
+            if user_selection.lower() == 'x':
                 exit()
+
+            if user_selection.lower() == 'a':
+                await add_account()
+                continue
+
+            if user_selection.lower() == 'r':
+                if len(account_list) == 0:
+                    print('There is no accounts to remove!\n')
+                    continue
+                
+                else:
+                    await remove_account()
+                    continue
+
+            if int(user_selection) not in countlist:
+                print(crayons.red('Invalid selection\n'))
+                continue
+
+        except:
+            print(crayons.red('Select a valid option\n'))
+            continue
+
+        selected_account = int(user_selection) - 1
+
+        game_folder = configuration['fortnite_path']
+
+        if os.path.isdir(game_folder) == False:
+            print('Seems like the fortnite path in configuration is not valid. Check it and try again')
+            await aioconsole.ainput('Press ENTER to exit')
+
+        else:
+
+            credentials = auths[account_list[selected_account]]
+
+            if int(time.time()) > credentials['refresh_expires']:
+                print('The credentials of this account have expired. Re-add the account and try again')
+
+            Auth = http.EpicAPI()
+            auth_request = await Auth.refresh_token_auth(refresh_token = credentials['refresh_token'])
+
+            if 'errorCode' not in auth_request.text:
+
+                oauth_json = auth_request.json()
+
+                credentials['refresh_token'] = str(oauth_json['refresh_token'])
+                credentials['refresh_expires'] = int(time.time()) + oauth_json['refresh_expires']
+
+                auths[account_list[selected_account]] = credentials
+
+                with open('auths.json', 'w', encoding='utf-8') as f:
+                    json.dump(auths, f, indent=4, ensure_ascii=False)
+
+                exchange_request = await Auth.get_exchange_code(oauth_json['access_token'])
+
+                if 'errorCode' not in exchange_request.text:
+
+                    exchange_json = exchange_request.json()
+                    launch_command = ''
+
+                    launch_info = await Auth.get_launch_info()
+                    if launch_info.status_code == 200:
+                        log.debug('Using baydev.online launch args.')
+                        launch_command = launch_info.json()['data']['launch_args']
+
+                    else:
+                        log.debug('Using epicgames manifest launch args.')
+                        Reader = UEManifestReader.UEManifestReader()
+                        manifest = await Reader.download_manifest()
+                        launch_command = manifest['LaunchCommand']
+
+                    print('Launching...')
+
+                    launch_try = await launch_game(exchange_json['code'], launch_command)
+
+                    if launch_try == False:
+                        print('Failed game launch.')
+                        await asyncio.sleep(2)
+                        continue
+
+                    else:
+
+                        print('Launched.')
+                        await asyncio.sleep(3)
+                        exit()
+
+                else:
+                    print(f'Exchange code request failed. {exchange_request.json()["errorMessage"]}')
+                    continue
+
             else:
-                log.error(f'Failed game launch.')
-                Auth.kill_auth_session()
-                print('\n')
-                time.sleep(1.5)
+                print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
                 continue
 
 
 if __name__ == '__main__':
-    Launcher = Main()
-    Launcher.start()
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(start())

@@ -1,4 +1,5 @@
+coloredlogs==15.0.1
+aioconsole==0.3.3
 requests==2.25.1
 crayons==0.4.0
 psutil==5.8.0
-win10toast-click==0.1.2
