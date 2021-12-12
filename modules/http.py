@@ -77,7 +77,7 @@ class EpicAPI:
     async def get_launch_info(self):
 
         response = requests.get(
-            'https://baydev.online/api/v1/fortnite/launchinfo'
+            'https://baydev.online/api/v1/launchinfo'
         )
 
         return response
