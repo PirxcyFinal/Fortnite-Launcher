@@ -1,4 +1,4 @@
-v = '2.0'
+v = '2.1'
 
 try:
     import UEManifestReader
@@ -18,6 +18,7 @@ except:
     print('It seems that some modules are missing. Run "INSTALL.bat" and try again.')
     input('Press ENTER to exit')
 
+from os import kill
 from modules import http
 
 log = logging.getLogger('FortniteLauncher')
@@ -64,20 +65,38 @@ async def add_account():
     print()
     print(crayons.green('Add Account', bold=True))
 
-    AUTHORIZATION_URL = 'https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code'
-    AUTHORIZATION_URL_LOGIN = 'https://www.epicgames.com/id/logout?redirectUrl=https%3A%2F%2Fwww.epicgames.com%2Fid%2Flogin%3FredirectUrl%3Dhttps%253A%252F%252Fwww.epicgames.com%252Fid%252Fapi%252Fredirect%253FclientId%253D34a02cf8f4414e29b15921876da36f9a%2526responseType%253Dcode'
+    auth_type = configuration['auth_type']
+
+    LAUNCHER_AUTHORIZATION_URL = 'https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code'
+    LAUNCHER_AUTHORIZATION_URL_LOGIN = 'https://www.epicgames.com/id/logout?redirectUrl=https%3A%2F%2Fwww.epicgames.com%2Fid%2Flogin%3FredirectUrl%3Dhttps%253A%252F%252Fwww.epicgames.com%252Fid%252Fapi%252Fredirect%253FclientId%253D34a02cf8f4414e29b15921876da36f9a%2526responseType%253Dcode'
+
+    IOS_AUTHORIZATION_URL = 'https://www.epicgames.com/id/api/redirect?clientId=3446cd72694c4a4485d81b77adbb2141&responseType=code'
+    IOS_AUTHORIZATION_URL_LOGIN = 'https://www.epicgames.com/id/logout?redirectUrl=https%3A%2F%2Fwww.epicgames.com%2Fid%2Flogin%3FredirectUrl%3Dhttps%253A%252F%252Fwww.epicgames.com%252Fid%252Fapi%252Fredirect%253FclientId%253D3446cd72694c4a4485d81b77adbb2141%2526responseType%253Dcode'
 
     while True:
-        user_selection = await aioconsole.ainput(f'Are you logged in to the required account in your web browser?\nType {crayons.green("1")} if yes.\nType {crayons.red("2")} if no.\n')
+        user_selection = await aioconsole.ainput(f'Are you logged in to the required account in your web browser?\nType {crayons.white("1", bold=True)} if yes.\nType {crayons.white("2", bold=True)} if no.\n')
 
         user_logged = user_selection.strip(' ')
 
         if user_logged == '1':
-            choosen_url = AUTHORIZATION_URL
+
+            if auth_type == 'refresh':
+
+                choosen_url = LAUNCHER_AUTHORIZATION_URL
+            else:
+                choosen_url = IOS_AUTHORIZATION_URL
+
         elif user_logged == '2':
-            choosen_url = AUTHORIZATION_URL_LOGIN
+
+            if auth_type == 'refresh':
+                choosen_url = LAUNCHER_AUTHORIZATION_URL_LOGIN
+            else:
+                choosen_url = IOS_AUTHORIZATION_URL_LOGIN
+
         else:
+
             print('Select a valid option! Try again\n')
+
             continue
         break
 
@@ -105,30 +124,75 @@ async def add_account():
 
     Auth = http.EpicAPI()
 
-    auth_request = await Auth.authorization_code_auth(code)
+    if auth_type == 'refresh':
 
-    if 'errorCode' not in auth_request.text:
+        auth_request = await Auth.authorization_code_auth(code)
 
-        oauth_json = auth_request.json()
+        if 'errorCode' not in auth_request.text:
 
-        credentials = {}
+            oauth_json = auth_request.json()
 
-        credentials['refresh_token'] = str(oauth_json['refresh_token'])
-        credentials['refresh_expires'] = int(time.time()) + oauth_json['refresh_expires']
+            credentials = {}
 
-        auths[oauth_json['displayName']] = credentials
+            credentials['auth_type'] = 'refresh'
+            credentials['refresh_token'] = str(oauth_json['refresh_token'])
+            credentials['refresh_expires'] = int(time.time()) + oauth_json['refresh_expires']
 
-        with open('auths.json', 'w', encoding='utf-8') as f:
-            json.dump(auths, f, indent=4, ensure_ascii=False)
+            auths[oauth_json['displayName']] = credentials
 
-        log.debug('add_account flow completed without errors.')
+            with open('auths.json', 'w', encoding='utf-8') as f:
+                json.dump(auths, f, indent=4, ensure_ascii=False)
 
-        return f'Account "{oauth_json["displayName"]}" added successfully! (Note: this login will expire after 23 days of inactivity)'
+            log.debug('add_account flow completed without errors.')
 
-    else:
-        print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
-        log.debug('add_account flow stopped. The authentication failed.')
-        return False
+            return f'Account "{oauth_json["displayName"]}" added successfully! (Note: this login will expire after 23 days of inactivity)'
+
+        else:
+            print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
+            log.debug('add_account flow stopped. The authentication failed.')
+            return False
+    
+    elif auth_type == 'device':
+
+        auth_request = await Auth.authorization_code_auth(code, client = http.Clients.fortniteIOSGameClient)
+
+        if 'errorCode' not in auth_request.text:
+
+            oauth_json = auth_request.json()
+
+            device_create = await Auth.create_device_auth(oauth_json['access_token'], oauth_json['account_id'])
+
+            if 'errorCode' not in device_create.text:
+
+                device_json = device_create.json()
+
+                credentials = {}
+                
+                credentials['auth_type'] = 'device'
+                credentials['account_id'] = device_json['accountId']
+                credentials['device_id'] = device_json['deviceId']
+                credentials['secret'] = device_json['secret']
+
+
+                auths[oauth_json['displayName']] = credentials
+
+                with open('auths.json', 'w', encoding='utf-8') as f:
+                    json.dump(auths, f, indent=4, ensure_ascii=False)
+
+                await Auth.kill_oauth_session(oauth_json['access_token'])
+
+                return f'Account "{oauth_json["displayName"]}" added successfully!'
+
+            else:
+                print(f'Device auth creation failed. {auth_request.json()["errorMessage"]}')
+                log.debug('add_account flow stopped. The authentication failed.')
+                return False
+
+        else:
+            print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
+            log.debug('add_account flow stopped. The authentication failed.')
+            return False
+
 
 async def remove_account():
 
@@ -173,53 +237,112 @@ async def remove_account():
 
     credentials = auths[account_list[int(user_selection) - 1]]
 
-    if int(time.time()) > credentials['refresh_expires']:
+    if credentials['auth_type'] == 'refresh':
 
-        del auths[account_list[int(user_selection) - 1]]
-
-        with open('auths.json', 'w', encoding='utf-8') as f:
-            json.dump(auths, f, indent=4, ensure_ascii=False)
-
-        log.debug('remove_account flow completed. The saved refresh wasn\'t valid and removed from auths.json file')
-        print('Account removed successfully.')
-        return True
-    
-    else:
-
-        Auth = http.EpicAPI()
-        auth_request = await Auth.refresh_token_auth(refresh_token = credentials['refresh_token'])
-
-        if 'errorCode' not in auth_request.text:
-
-            oauth_json = auth_request.json()
-            
-            kill_request = await Auth.kill_oauth_session(oauth_json['access_token'])
-
-            if kill_request != 403:
-
-                del auths[account_list[int(user_selection) - 1]]
-
-                with open('auths.json', 'w', encoding='utf-8') as f:
-                    json.dump(auths, f, indent=4, ensure_ascii=False)
-
-                log.debug('remove_account flow completed without errors')
-                print('Account removed successfully.')
-                return True
-
-        else:
-
-            print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
-            print('Removing account from auths.json file anyway.')
+        if int(time.time()) > credentials['refresh_expires']:
 
             del auths[account_list[int(user_selection) - 1]]
 
             with open('auths.json', 'w', encoding='utf-8') as f:
                 json.dump(auths, f, indent=4, ensure_ascii=False)
 
-            log.debug('remove_account flow failed successfully. Authentication failed but removed from auths.json anyways')
-
-            print('Account removed.') # task failed successfully
+            log.debug('remove_account flow completed. The saved refresh wasn\'t valid and removed from auths.json file')
+            print('Account removed successfully.')
             return True
+        
+        else:
+
+            Auth = http.EpicAPI()
+            auth_request = await Auth.refresh_token_auth(refresh_token = credentials['refresh_token'])
+
+            if 'errorCode' not in auth_request.text:
+
+                oauth_json = auth_request.json()
+                
+                kill_request = await Auth.kill_oauth_session(oauth_json['access_token'])
+
+                if kill_request not in [401, 403]:
+
+                    del auths[account_list[int(user_selection) - 1]]
+
+                    with open('auths.json', 'w', encoding='utf-8') as f:
+                        json.dump(auths, f, indent=4, ensure_ascii=False)
+
+                    log.debug('remove_account flow completed without errors')
+                    print('Account removed successfully.')
+                    return True
+
+            else:
+
+                print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
+                print('Removing account from auths.json file anyway.')
+
+                del auths[account_list[int(user_selection) - 1]]
+
+                with open('auths.json', 'w', encoding='utf-8') as f:
+                    json.dump(auths, f, indent=4, ensure_ascii=False)
+
+                log.debug('remove_account flow failed successfully. Authentication failed but removed from auths.json anyways')
+
+                print('Account removed.') # task failed successfully
+                return True
+
+    elif credentials['auth_type'] == 'device':
+
+        Auth = http.EpicAPI()
+
+        auth_request = await Auth.device_auths_auth(credentials)
+
+        if 'errorCode' not in auth_request.text:
+
+            oauth_json = auth_request.json()
+
+            kill_device = await Auth.delete_device_auth(oauth_json['access_token'], account_id=credentials['account_id'], device_id=credentials['device_id'])
+
+            if kill_device.status_code not in [401, 403]:
+
+                del auths[account_list[int(user_selection) - 1]]
+
+                with open('auths.json', 'w', encoding='utf-8') as f:
+                    json.dump(auths, f, indent=4, ensure_ascii=False)
+
+                await Auth.kill_oauth_session(oauth_json['access_token'])
+
+                log.debug('remove_account flow completed without errors')
+                print('Account removed successfully.')
+                return True
+
+            else:
+
+                print(f'Device auth delete failed. {kill_device.json()["errorMessage"]}')
+                print('Removing account from auths.json anyway. Change the account password to make sure you kill the device auth.')
+
+                del auths[account_list[int(user_selection) - 1]]
+
+                with open('auths.json', 'w', encoding='utf-8') as f:
+                    json.dump(auths, f, indent=4, ensure_ascii=False)
+
+                log.debug('remove_account flow failed successfully. Device delete failed but removed from auths.json anyways')
+
+                await Auth.kill_oauth_session(oauth_json['access_token'])
+
+                print('Account removed.') # task failed successfully
+                return True
+
+        else:
+
+                print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
+                print('Removing account from auths.json anyway.')
+
+                del auths[account_list[int(user_selection) - 1]]
+
+                with open('auths.json', 'w', encoding='utf-8') as f:
+                    json.dump(auths, f, indent=4, ensure_ascii=False)
+
+                log.debug('remove_account flow failed successfully. Authentication failed but removed from auths.json anyways')
+
+                print('Account removed.') # task failed successfully
+                return True
 
     
 async def launch_game(exchange_code: str, launch_command: str):
@@ -230,7 +353,7 @@ async def launch_game(exchange_code: str, launch_command: str):
     executable_args = launch_command
     additional_args = configuration["commandline_arguments"]
 
-    log.debug('Manifest downloaded and processed correctly, preparing command line arguments')
+    log.debug('Preparing command line arguments.')
 
     args = [
         executable_args,
@@ -281,15 +404,23 @@ async def start():
 
         try:
             configuration = json.load(open('config.json', 'r', encoding = 'utf-8'))
+
+            if configuration['auth_type'] not in ['refresh', 'device']:
+                print('Error, the choosen auth type in configuration file isn\'t valid. Auth type must be "refresh" or "device".')
+                await aioconsole.ainput('Press ENTER to exit')
+                exit()
+
         except Exception as e:
             print(f'An error ocurred loading config.json file. {e}')
             await aioconsole.ainput('Press ENTER to exit')
+            exit()
 
         try:
             auths = json.load(open('auths.json', 'r', encoding = 'utf-8'))
         except Exception as e:
             print(f'An error ocurred loading auths.json file. {e}')
             await aioconsole.ainput('Press ENTER to exit')
+            exit()
 
         account_list = list(auths.keys())
         countlist = []
@@ -313,7 +444,9 @@ async def start():
                 exit()
 
             if user_selection.lower() == 'a':
-                await add_account()
+                add = await add_account()
+                if isinstance(add, str):
+                    print(add)
                 continue
 
             if user_selection.lower() == 'r':
@@ -345,64 +478,145 @@ async def start():
 
             credentials = auths[account_list[selected_account]]
 
-            if int(time.time()) > credentials['refresh_expires']:
-                print('The credentials of this account have expired. Re-add the account and try again')
+            auth_type = credentials['auth_type']
 
-            Auth = http.EpicAPI()
-            auth_request = await Auth.refresh_token_auth(refresh_token = credentials['refresh_token'])
+            if auth_type == 'refresh':
 
-            if 'errorCode' not in auth_request.text:
+                if int(time.time()) > credentials['refresh_expires']:
+                    print('The credentials of this account have expired. Re-add the account and try again')
 
-                oauth_json = auth_request.json()
+                Auth = http.EpicAPI()
+                auth_request = await Auth.refresh_token_auth(refresh_token = credentials['refresh_token'])
 
-                credentials['refresh_token'] = str(oauth_json['refresh_token'])
-                credentials['refresh_expires'] = int(time.time()) + oauth_json['refresh_expires']
+                if 'errorCode' not in auth_request.text:
 
-                auths[account_list[selected_account]] = credentials
+                    oauth_json = auth_request.json()
 
-                with open('auths.json', 'w', encoding='utf-8') as f:
-                    json.dump(auths, f, indent=4, ensure_ascii=False)
+                    credentials['refresh_token'] = str(oauth_json['refresh_token'])
+                    credentials['refresh_expires'] = int(time.time()) + oauth_json['refresh_expires']
 
-                exchange_request = await Auth.get_exchange_code(oauth_json['access_token'])
+                    auths[account_list[selected_account]] = credentials
 
-                if 'errorCode' not in exchange_request.text:
+                    with open('auths.json', 'w', encoding='utf-8') as f:
+                        json.dump(auths, f, indent=4, ensure_ascii=False)
 
-                    exchange_json = exchange_request.json()
-                    launch_command = ''
+                    exchange_request = await Auth.get_exchange_code(oauth_json['access_token'])
 
-                    launch_info = await Auth.get_launch_info()
-                    if launch_info.status_code == 200:
-                        log.debug('Using baydev.online launch args.')
-                        launch_command = launch_info.json()['data']['launch_args']
+                    if 'errorCode' not in exchange_request.text:
+
+                        exchange_json = exchange_request.json()
+                        launch_command = ''
+
+                        launch_info = await Auth.get_launch_info()
+                        if launch_info.status_code == 200:
+                            log.debug('Using baydev api launch args.')
+                            launch_command = launch_info.json()['data']['launch_args']
+                            log.debug(f'Launch args for build {launch_info.json()["data"]["build"]}')
+
+                        else:
+                            log.debug('Using epicgames manifest launch args.')
+                            Reader = UEManifestReader.UEManifestReader()
+                            manifest = await Reader.download_manifest()
+                            launch_command = manifest['LaunchCommand']
+
+                        print('Launching...')
+
+                        launch_try = await launch_game(exchange_json['code'], launch_command)
+
+                        if launch_try == False:
+                            print('Failed game launch.')
+                            await asyncio.sleep(2)
+                            continue
+
+                        else:
+
+                            print('Launched.')
+                            await asyncio.sleep(3)
+                            exit()
 
                     else:
-                        log.debug('Using epicgames manifest launch args.')
-                        Reader = UEManifestReader.UEManifestReader()
-                        manifest = await Reader.download_manifest()
-                        launch_command = manifest['LaunchCommand']
-
-                    print('Launching...')
-
-                    launch_try = await launch_game(exchange_json['code'], launch_command)
-
-                    if launch_try == False:
-                        print('Failed game launch.')
-                        await asyncio.sleep(2)
+                        print(f'Exchange code request failed. {exchange_request.json()["errorMessage"]}')
                         continue
 
-                    else:
-
-                        print('Launched.')
-                        await asyncio.sleep(3)
-                        exit()
-
                 else:
-                    print(f'Exchange code request failed. {exchange_request.json()["errorMessage"]}')
+                    print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
                     continue
 
             else:
-                print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
-                continue
+
+                Auth = http.EpicAPI()
+                auth_request = await Auth.device_auths_auth(credentials)
+
+                if 'errorCode' not in auth_request.text:
+
+                    oauth_json = auth_request.json()
+
+                    exchange_request = await Auth.get_exchange_code(oauth_json['access_token'])
+
+                    if 'errorCode' not in exchange_request.text:
+
+                        exchange_auth = exchange_request.json()
+
+                        launcher_auth_request = await Auth.exchange_code_auth(exchange_auth['code'])
+
+                        if 'errorCode' not in launcher_auth_request.text:
+
+                            launcher_auth = launcher_auth_request.json()
+
+                            launcher_exchange_request = await Auth.get_exchange_code(launcher_auth['access_token'])
+
+                            if 'errorCode' not in launcher_exchange_request.text:
+
+                                final_exchange_json = launcher_exchange_request.json()
+
+                                launch_command = ''
+
+                                launch_info = await Auth.get_launch_info()
+                                if launch_info.status_code == 200:
+                                    log.debug('Using baydev api launch args.')
+                                    launch_command = launch_info.json()['data']['launch_args']
+
+                                else:
+                                    log.debug('Using epicgames manifest launch args. (This may take a while)')
+                                    Reader = UEManifestReader.UEManifestReader()
+                                    manifest = await Reader.download_manifest()
+                                    launch_command = manifest['LaunchCommand']
+
+                                print('Launching...')
+
+                                launch_try = await launch_game(final_exchange_json['code'], launch_command)
+
+                                if launch_try == False:
+                                    print('Failed game launch.')
+                                    await Auth.kill_oauth_session(oauth_json['access_token'])
+                                    await asyncio.sleep(2)
+                                    continue
+
+                                else:
+
+                                    print('Launched.')
+                                    await asyncio.sleep(3)
+                                    exit()
+                            
+                            else:
+                                print(f'Launcher exchange code generate failed. {launcher_exchange_request.json()["errorMessage"]}')
+                                await Auth.kill_oauth_session(oauth_json['access_token'])
+                                continue
+
+                        else:
+                            print(f'Launcher exchange auth failed. {launcher_auth_request.json()["errorMessage"]}')
+                            await Auth.kill_oauth_session(oauth_json['access_token'])
+                            continue
+
+                    else:
+                        print(f'Exchange code request failed. {exchange_request.json()["errorMessage"]}')
+                        await Auth.kill_oauth_session(oauth_json['access_token'])
+                        continue
+                
+                else:
+                    print(f'Authentication failed. {auth_request.json()["errorMessage"]}')
+                    continue
+
 
 
 if __name__ == '__main__':
